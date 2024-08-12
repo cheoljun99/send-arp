@@ -42,15 +42,15 @@ Mac getTargetMac(pcap_t* handle, const char* victim_ip) {
 	return Mac(); // 실패 시 빈 MAC 주소 반환
 }
 
-void GetDeviceIPAndMAC(const char* deviceName){
+void GetMyIPAndMAC(const char* device){
 	pcap_if_t* alldevs;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	uint32_t res = pcap_findalldevs(&alldevs, errbuf);
-	printf("Finding My IP and MAC address for device %s...\n", deviceName);
+	printf("Finding My IP and MAC address for device %s...\n", device);
 	if (res != 0)
 		fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, errbuf);
 	for (pcap_if_t* d = alldevs; d != NULL; d = d->next)
-		if (strcmp(d->name, deviceName) == 0)
+		if (strcmp(d->name, device) == 0)
 			for (pcap_addr_t* a = d->addresses; a != NULL; a = a->next)
 				if (a->addr->sa_family == AF_INET)
 				{
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 	cout << "Program start..." << endl << endl<<endl;
-	GetDeviceIPAndMAC(dev);
+	GetMyIPAndMAC(dev);
 	std::cout << "MAC Address of My IP (" << string(myIpAddr)<< ") is ";
 	printMacAddress(myMacAddr); // MAC 주소 출력
 	cout << endl;
