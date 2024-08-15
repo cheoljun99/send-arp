@@ -31,11 +31,14 @@ Mac getTargetMac(pcap_t* handle, const char* victim_ip) {
 	Ip victim_ip_obj(ntohl(inet_addr(victim_ip)));
 	while ((res = pcap_next_ex(handle, &header, &packet)) >= 0) {
 		if (res == 0) {
-			if (difftime(time(nullptr), start_time) > 10) { // 10초 경과 확인
-				cerr << "Timeout after 10 seconds while waiting for ARP reply." << endl;
-				return Mac(); // 타임아웃 시 빈 MAC 주소 반환
+			if (difftime(time(nullptr), start_time) > 5) { 
+				// 패킷은 수신을 못하여 타임아웃을 발생했을 때 5초가 지난경우
+				// 5초 경과 확인
+				cerr << "Timeout after 5 seconds while waiting for ARP reply." << endl;
+				return Mac::nullMac(); // 타임아웃 시 빈 MAC 주소 반환
 			}
-			continue; // 타임아웃 발생 시 루프 계속
+			else
+				continue; // 타임아웃 발생 시 루프 계속
 		}
 		EthArpPacket* arp_reply = (EthArpPacket*)packet;
 		// 디버깅용 출력
@@ -44,9 +47,16 @@ Mac getTargetMac(pcap_t* handle, const char* victim_ip) {
 		// ARP 응답인지 확인하고, 올바른 IP에 대한 응답인지 확인
 		if (arp_reply->eth_.type() == EthHdr::Arp && arp_reply->arp_.op() == ArpHdr::Reply && arp_reply->arp_.sip() == victim_ip_obj)
 			return arp_reply->arp_.smac();// 응답 패킷에서 상대방의 MAC 주소 추출
+
+		if (difftime(time(nullptr), start_time) > 5) { 
+			// 패킷은 수신하지만 5초 동안 쓸잘데기 없는 패킷만 받은 경우
+			// 5초 경과 확인
+			cerr << "Timeout after 5 seconds while waiting for ARP reply." << endl;
+			return Mac::nullMac(); // 타임아웃 시 빈 MAC 주소 반환
+		}
 	}
 	cerr << "Failed to capture ARP reply for " << victim_ip << endl;
-	return Mac(); // 실패 시 빈 MAC 주소 반환
+	return Mac::nullMac(); // 실패 시 빈 MAC 주소 반환
 }
 
 void GetMyIPAndMAC(const char* device){
